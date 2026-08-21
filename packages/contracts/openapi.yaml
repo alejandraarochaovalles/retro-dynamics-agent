@@ -1,0 +1,990 @@
+openapi: 3.1.0
+info:
+  title: Retro Dynamics Agent API
+  version: 0.1.0
+  description: |-
+    API contract between apps/web and apps/api. See docs/adr for the reasoning behind each architecture decision.
+
+    components.schemas below is generated from apps/api/models.py — run apps/api/scripts/generate_openapi_contract.py to regenerate after changing models.py or a route's signature, rather than editing schemas here by hand.
+servers:
+- url: /api
+paths:
+  /teams:
+    post:
+      summary: Create team
+      operationId: createTeam
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TeamCreate'
+        required: true
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Team'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /teams/{team_id}/integration:
+    post:
+      summary: Connect Jira or Azure DevOps
+      operationId: connectIntegration
+      parameters:
+      - name: team_id
+        in: path
+        required: true
+        schema:
+          type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/IntegrationConnect'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Team'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /teams/{team_id}/sessions:
+    get:
+      summary: Team's retro history
+      operationId: listTeamSessions
+      parameters:
+      - name: team_id
+        in: path
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/SessionListItem'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /dynamics/generate:
+    post:
+      summary: Generate dynamic proposals (LLM)
+      operationId: generateDynamics
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DynamicsGenerateRequest'
+        required: true
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DynamicsGenerateResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /sessions:
+    post:
+      summary: Create retro session
+      operationId: createSession
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SessionCreate'
+        required: true
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SessionOut'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /sessions/{id}:
+    get:
+      summary: Session state
+      operationId: getSession
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SessionOut'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /sessions/{id}/start:
+    post:
+      summary: Start session (lobby → active)
+      operationId: startSession
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SessionStart'
+              default: {}
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SessionOut'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /sessions/{id}/phase:
+    post:
+      summary: Advance phase
+      operationId: advancePhase
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PhaseAdvance'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SessionOut'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /sessions/join:
+    post:
+      summary: Join a session with join_code
+      operationId: joinSession
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SessionJoin'
+        required: true
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SessionOut'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /sessions/{id}/close:
+    post:
+      summary: Close session and sync from Liveblocks
+      operationId: closeSession
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SessionClose'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SessionOut'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /sessions/{id}/summary:
+    get:
+      summary: Final retro report
+      operationId: getSessionSummary
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SessionSummary'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /liveblocks/auth:
+    post:
+      summary: Authorize access to a Liveblocks room
+      operationId: liveblocksAuth
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LiveblocksAuthRequest'
+        required: true
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LiveblocksAuthResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /sessions/{id}/groups:
+    get:
+      summary: Groups suggested after closing
+      operationId: listGroups
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Group'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /sessions/{id}/groups/{group_id}:
+    patch:
+      summary: Edit a group's label or membership
+      operationId: updateGroup
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: group_id
+        in: path
+        required: true
+        schema:
+          type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/GroupUpdate'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Group'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /sessions/{id}/votes-summary:
+    get:
+      summary: Ranking of notes/groups by votes
+      operationId: getVotesSummary
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/VotesSummaryEntry'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /sessions/{id}/action-items:
+    post:
+      summary: Create action item from a group
+      operationId: createActionItem
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ActionItemCreate'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ActionItem'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /sessions/{id}/action-items/{item_id}:
+    patch:
+      summary: Edit action item
+      operationId: updateActionItem
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: item_id
+        in: path
+        required: true
+        schema:
+          type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ActionItemUpdate'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ActionItem'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+    delete:
+      summary: Discard action item
+      operationId: deleteActionItem
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: item_id
+        in: path
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DeleteResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /sessions/{id}/export:
+    post:
+      summary: Create tickets in Jira/Azure DevOps
+      operationId: exportActionItems
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ExportRequest'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ExportResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+components:
+  schemas:
+    ActionItem:
+      properties:
+        id:
+          type: string
+        group_id:
+          type: string
+        title:
+          type: string
+        description:
+          type: string
+        assignee:
+          anyOf:
+          - type: string
+          - type: 'null'
+        exported:
+          type: boolean
+          default: false
+        external_ref:
+          anyOf:
+          - type: string
+          - type: 'null'
+      type: object
+      required:
+      - id
+      - group_id
+      - title
+      - description
+      - assignee
+    ActionItemCreate:
+      properties:
+        group_id:
+          type: string
+        title:
+          type: string
+        description:
+          type: string
+          default: ''
+        assignee:
+          anyOf:
+          - type: string
+          - type: 'null'
+      type: object
+      required:
+      - group_id
+      - title
+    ActionItemUpdate:
+      properties:
+        title:
+          anyOf:
+          - type: string
+          - type: 'null'
+        description:
+          anyOf:
+          - type: string
+          - type: 'null'
+        assignee:
+          anyOf:
+          - type: string
+          - type: 'null'
+      type: object
+    DeleteResponse:
+      properties:
+        deleted:
+          type: string
+      type: object
+      required:
+      - deleted
+    DynamicProposal:
+      properties:
+        name:
+          type: string
+        description:
+          type: string
+        phases:
+          items:
+            type: string
+          type: array
+        icon:
+          type: string
+          default: 🧭
+        phase_descriptions:
+          additionalProperties:
+            type: string
+          type: object
+      type: object
+      required:
+      - name
+      - description
+      - phases
+    DynamicsGenerateRequest:
+      properties:
+        context:
+          type: string
+        team_id:
+          anyOf:
+          - type: string
+          - type: 'null'
+        count:
+          type: integer
+          maximum: 5.0
+          minimum: 1.0
+          default: 3
+      type: object
+      required:
+      - context
+    DynamicsGenerateResponse:
+      properties:
+        proposals:
+          items:
+            $ref: '#/components/schemas/DynamicProposal'
+          type: array
+        source:
+          type: string
+          enum:
+          - groq
+          - fallback
+      type: object
+      required:
+      - proposals
+      - source
+    ExportRequest:
+      properties:
+        action_item_ids:
+          items:
+            type: string
+          type: array
+      type: object
+    ExportResponse:
+      properties:
+        results:
+          items:
+            $ref: '#/components/schemas/ExportResult'
+          type: array
+      type: object
+      required:
+      - results
+    ExportResult:
+      properties:
+        action_item_id:
+          type: string
+        status:
+          type: string
+          enum:
+          - created
+          - skipped
+          - failed
+        external_ref:
+          anyOf:
+          - type: string
+          - type: 'null'
+        detail:
+          anyOf:
+          - type: string
+          - type: 'null'
+      type: object
+      required:
+      - action_item_id
+      - status
+    Group:
+      properties:
+        id:
+          type: string
+        label:
+          type: string
+        note_ids:
+          items:
+            type: string
+          type: array
+        votes:
+          type: integer
+        author:
+          type: string
+          default: someone
+        text:
+          type: string
+          default: ''
+        phase:
+          type: string
+          default: unknown
+      type: object
+      required:
+      - id
+      - label
+      - note_ids
+      - votes
+    GroupUpdate:
+      properties:
+        label:
+          anyOf:
+          - type: string
+          - type: 'null'
+        note_ids:
+          anyOf:
+          - items:
+              type: string
+            type: array
+          - type: 'null'
+      type: object
+    HTTPValidationError:
+      properties:
+        detail:
+          items:
+            $ref: '#/components/schemas/ValidationError'
+          type: array
+      type: object
+    IntegrationConnect:
+      properties:
+        provider:
+          type: string
+          enum:
+          - jira
+          - azure_devops
+        config:
+          additionalProperties: true
+          type: object
+      type: object
+      required:
+      - provider
+    LiveblocksAuthRequest:
+      properties:
+        room:
+          type: string
+        participant_name:
+          type: string
+      type: object
+      required:
+      - room
+      - participant_name
+    LiveblocksAuthResponse:
+      properties:
+        token:
+          type: string
+        configured:
+          type: boolean
+      type: object
+      required:
+      - token
+      - configured
+    Note:
+      properties:
+        id:
+          anyOf:
+          - type: string
+          - type: 'null'
+        author:
+          type: string
+        text:
+          type: string
+        x:
+          type: number
+          default: 0
+        y:
+          type: number
+          default: 0
+        votes:
+          type: integer
+          default: 0
+        phase:
+          type: string
+          default: unknown
+      type: object
+      required:
+      - author
+      - text
+    PhaseAdvance:
+      properties:
+        phase:
+          type: string
+          enum:
+          - lobby
+          - active
+          - consolidation
+          - closed
+      type: object
+      required:
+      - phase
+    SessionClose:
+      properties:
+        notes:
+          items:
+            $ref: '#/components/schemas/Note'
+          type: array
+        participant_name:
+          anyOf:
+          - type: string
+          - type: 'null'
+      type: object
+    SessionCreate:
+      properties:
+        team_id:
+          type: string
+        title:
+          type: string
+        dynamic:
+          anyOf:
+          - additionalProperties: true
+            type: object
+          - type: 'null'
+        created_by:
+          anyOf:
+          - type: string
+          - type: 'null'
+      type: object
+      required:
+      - team_id
+      - title
+    SessionJoin:
+      properties:
+        join_code:
+          type: string
+        participant_name:
+          type: string
+      type: object
+      required:
+      - join_code
+      - participant_name
+    SessionListItem:
+      properties:
+        id:
+          type: string
+        title:
+          type: string
+        phase:
+          type: string
+          enum:
+          - lobby
+          - active
+          - consolidation
+          - closed
+        created_at:
+          type: string
+      type: object
+      required:
+      - id
+      - title
+      - phase
+      - created_at
+    SessionOut:
+      properties:
+        id:
+          type: string
+        team_id:
+          type: string
+        title:
+          type: string
+        join_code:
+          type: string
+        phase:
+          type: string
+          enum:
+          - lobby
+          - active
+          - consolidation
+          - closed
+        dynamic:
+          anyOf:
+          - additionalProperties: true
+            type: object
+          - type: 'null'
+        created_at:
+          type: string
+        closed_at:
+          anyOf:
+          - type: string
+          - type: 'null'
+        created_by:
+          anyOf:
+          - type: string
+          - type: 'null'
+      type: object
+      required:
+      - id
+      - team_id
+      - title
+      - join_code
+      - phase
+      - dynamic
+      - created_at
+      - closed_at
+    SessionStart:
+      properties:
+        participant_name:
+          anyOf:
+          - type: string
+          - type: 'null'
+      type: object
+    SessionSummary:
+      properties:
+        session_id:
+          type: string
+        title:
+          type: string
+        phase:
+          type: string
+          enum:
+          - lobby
+          - active
+          - consolidation
+          - closed
+        groups:
+          items:
+            $ref: '#/components/schemas/Group'
+          type: array
+        action_items:
+          items:
+            $ref: '#/components/schemas/ActionItem'
+          type: array
+      type: object
+      required:
+      - session_id
+      - title
+      - phase
+      - groups
+      - action_items
+    Team:
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        integration:
+          anyOf:
+          - additionalProperties: true
+            type: object
+          - type: 'null'
+        created_at:
+          type: string
+      type: object
+      required:
+      - id
+      - name
+      - created_at
+    TeamCreate:
+      properties:
+        name:
+          type: string
+      type: object
+      required:
+      - name
+    ValidationError:
+      properties:
+        loc:
+          items:
+            anyOf:
+            - type: string
+            - type: integer
+          type: array
+        msg:
+          type: string
+        type:
+          type: string
+        input: {}
+        ctx:
+          type: object
+      type: object
+      required:
+      - loc
+      - msg
+      - type
+    VotesSummaryEntry:
+      properties:
+        id:
+          type: string
+        label:
+          type: string
+        votes:
+          type: integer
+      type: object
+      required:
+      - id
+      - label
+      - votes

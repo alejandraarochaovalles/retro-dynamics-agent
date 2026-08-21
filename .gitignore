@@ -1,0 +1,21 @@
+# Node / frontend
+node_modules/
+apps/web/dist/
+apps/web/.vite/
+
+# Python / backend
+__pycache__/
+*.pyc
+.venv/
+.pytest_cache/
+*.egg-info/
+apps/api/dev.db   # SQLite fallback when DATABASE_URL isn't set (see db.py)
+
+# Env
+.env
+.env.local
+
+# Editor / OS
+.DS_Store
+.vscode/
+.idea/
