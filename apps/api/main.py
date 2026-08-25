@@ -6,6 +6,7 @@ from __future__ import annotations
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from config import settings
 from routes import (
     action_items,
     consolidation,
@@ -22,11 +23,13 @@ app = FastAPI(
     description="See packages/contracts/openapi.yaml for the frontend/backend contract.",
 )
 
-# Local Vite dev server (either loopback form); tighten this once a deploy
-# target is chosen (ADR-0003).
+# Local Vite dev server (either loopback form) is always allowed; a deployed
+# frontend's origin is added on top via FRONTEND_ORIGIN (see config.py) once
+# a deploy target is chosen (ADR-0003) — e.g. FRONTEND_ORIGIN=
+# https://retro-dynamics-agent.vercel.app, comma-separated for more than one.
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173", "http://127.0.0.1:5173"],
+    allow_origins=["http://localhost:5173", "http://127.0.0.1:5173", *settings.frontend_origins],
     allow_methods=["*"],
     allow_headers=["*"],
 )
