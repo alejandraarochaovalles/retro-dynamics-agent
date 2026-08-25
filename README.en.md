@@ -4,6 +4,8 @@
 
 Generates unusual, engaging retrospective dynamics, facilitates them on a real-time collaborative board (free-position canvas, Miro-style), and turns the outcomes into Jira or Azure DevOps tickets.
 
+**Live demo**: [retro-dynamics-agent-gcdg.vercel.app](https://retro-dynamics-agent-gcdg.vercel.app) — backend at [retro-dynamics-agent.vercel.app](https://retro-dynamics-agent.vercel.app/health) / [docs](https://retro-dynamics-agent.vercel.app/docs).
+
 ## Why it exists
 
 Retros tend to repeat the same format (Start/Stop/Continue) until they stop producing new insights. This agent suggests different dynamics based on the sprint's context (incidents, a quiet sprint, a new team, etc.), facilitates the live session regardless of where the team is — same room or not — and closes the loop by creating the resulting action items directly in the backlog.
@@ -149,7 +151,7 @@ Each external integration degrades to a clear response instead of breaking the f
 
 ## Project status
 
-🚧 Under construction — the backend (`apps/api`) exposes the contract's endpoints with real persistence in Postgres (SQLAlchemy + Alembic), and the frontend now has the full flow through to the live board (create/join session → desktop canvas with Liveblocks). Still missing: the mobile view, grouping/consolidation after closing a session, and external integration credentials (Liveblocks, Groq, Jira/ADO). The full design is documented in [docs/adr](docs/adr/README.md).
+🚧 Under construction, but **deployed to production** (see ADR-0003): backend and frontend run on Vercel (serverless functions + static Vite build), with real Postgres on Supabase, Groq and Liveblocks configured and verified end to end. The backend (`apps/api`) exposes the contract's endpoints with real persistence in Postgres (SQLAlchemy + Alembic), and the frontend now has the full flow through to the live board (create/join session → desktop canvas with Liveblocks). Still missing: the mobile view, grouping/consolidation after closing a session, and Jira/Azure DevOps credentials (every other integration is already live in production). The full design is documented in [docs/adr](docs/adr/README.md).
 
 ## License
 

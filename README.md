@@ -4,6 +4,8 @@
 
 Genera dinámicas de retrospectiva interesantes y fuera de lo común, las facilita en un tablero colaborativo en tiempo real (posición libre, tipo Miro) y convierte los hallazgos en tickets de Jira o Azure DevOps.
 
+**Demo en vivo**: [retro-dynamics-agent-gcdg.vercel.app](https://retro-dynamics-agent-gcdg.vercel.app) — backend en [retro-dynamics-agent.vercel.app](https://retro-dynamics-agent.vercel.app/health) / [docs](https://retro-dynamics-agent.vercel.app/docs).
+
 ## Por qué existe
 
 Las retros suelen repetir el mismo formato (Start/Stop/Continue) hasta que dejan de generar insights nuevos. Este agente propone dinámicas distintas según el contexto del sprint (incidentes, sprint tranquilo, equipo nuevo, etc.), coordina la sesión en vivo con el equipo —estén donde estén, en la misma computadora o no— y cierra el círculo creando las acciones directamente en el backlog.
@@ -149,7 +151,7 @@ Cada integración externa se degrada a una respuesta clara en vez de romper el f
 
 ## Estado del proyecto
 
-🚧 En construcción — el backend (`apps/api`) expone los endpoints del contrato con persistencia real en Postgres (SQLAlchemy + Alembic), y el frontend tiene el flujo completo hasta el tablero en vivo (crear/unirse a sesión → canvas de escritorio con Liveblocks). Falta la vista mobile, la agrupación/consolidación tras cerrar la sesión, y las credenciales de las integraciones externas (Liveblocks, Groq, Jira/ADO). El diseño completo está documentado en [docs/adr](docs/adr/README.md).
+🚧 En construcción, pero **desplegado en producción** (ver ADR-0003): backend y frontend corren en Vercel (funciones serverless + Vite estático), con Postgres real en Supabase, Groq y Liveblocks configurados y verificados end-to-end. El backend (`apps/api`) expone los endpoints del contrato con persistencia real en Postgres (SQLAlchemy + Alembic), y el frontend tiene el flujo completo hasta el tablero en vivo (crear/unirse a sesión → canvas de escritorio con Liveblocks). Falta la vista mobile, la agrupación/consolidación tras cerrar la sesión, y las credenciales de Jira/Azure DevOps (el resto de integraciones ya están activas en producción). El diseño completo está documentado en [docs/adr](docs/adr/README.md).
 
 ## Licencia
 
