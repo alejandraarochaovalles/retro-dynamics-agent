@@ -328,6 +328,7 @@ button.icon-btn[aria-pressed="true"] {
 .phase-bar-row {
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
   gap: var(--space-4);
 }
 
@@ -343,6 +344,7 @@ button.icon-btn[aria-pressed="true"] {
 .phase-bar .spacer {
   margin-left: auto;
   display: flex;
+  flex-wrap: wrap;
   gap: var(--space-2);
 }
 
@@ -375,6 +377,7 @@ button.icon-btn[aria-pressed="true"] {
 
 .composer {
   display: flex;
+  flex-wrap: wrap;
   gap: var(--space-2);
   margin-bottom: var(--space-4);
 }
@@ -399,7 +402,7 @@ button.icon-btn[aria-pressed="true"] {
   height: 480px;
   border: 1px solid var(--color-border);
   border-radius: var(--radius-lg);
-  overflow: hidden;
+  overflow: auto;
   background-color: var(--color-surface);
   background-image: radial-gradient(circle, var(--color-border) 1px, transparent 1px);
   background-size: 20px 20px;
@@ -522,4 +525,30 @@ button.icon-btn[aria-pressed="true"] {
   margin-top: var(--space-2);
   font-size: 12px;
   color: var(--color-text-muted);
+}
+
+/* --- Small screens --- */
+
+@media (max-width: 640px) {
+  .app-shell {
+    padding: var(--space-4) var(--space-3);
+  }
+
+  .phase-bar .spacer {
+    width: 100%;
+    margin-left: 0;
+  }
+
+  .phase-bar .spacer button {
+    flex: 1;
+  }
+
+  .composer {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .composer .phase-select {
+    width: 100%;
+  }
 }

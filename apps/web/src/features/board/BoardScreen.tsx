@@ -1,5 +1,5 @@
 import { LiveList, LiveMap, LiveObject } from "@liveblocks/client";
-import { ClientSideSuspense, LiveblocksProvider, RoomProvider } from "@liveblocks/react/suspense";
+import { ClientSideSuspense, LiveblocksProvider, RoomProvider, useStatus } from "@liveblocks/react/suspense";
 import { useMemo } from "react";
 import type { DynamicProposal, Session } from "../../shared/api/client";
 import { Canvas } from "./Canvas";
@@ -26,6 +26,29 @@ const FALLBACK_DYNAMIC: DynamicProposal = {
     vote: "As a team, vote for the notes that matter most — everyone gets to pick their top ones.",
   },
 };
+
+// Shown while the Liveblocks room is still connecting/loading storage.
+// Corporate networks and VPNs commonly block the WebSocket connection
+// Liveblocks needs (proxies like Zscaler/Blue Coat terminate or drop
+// `wss://` traffic), which otherwise leaves the user staring at "Connecting…"
+// forever with no indication of what's wrong. useStatus() reads the room's
+// connection state so we can tell them what's actually happening instead.
+function ConnectingFallback() {
+  const status = useStatus();
+
+  if (status === "disconnected" || status === "reconnecting") {
+    return (
+      <p className="alert" role="alert">
+        No pudimos conectar al tablero en tiempo real (estado: {status}). Esto
+        suele pasar en redes corporativas o VPNs que bloquean conexiones
+        WebSocket — probá con datos móviles u otra red antes de reportarlo
+        como un error de la app.
+      </p>
+    );
+  }
+
+  return <p>Connecting to the board…</p>;
+}
 
 export function BoardScreen({
   session,
@@ -55,7 +78,7 @@ export function BoardScreen({
           } satisfies BoardStorage
         }
       >
-        <ClientSideSuspense fallback={<p>Connecting to the board…</p>}>
+        <ClientSideSuspense fallback={<ConnectingFallback />}>
           <PhaseTopBar
             sessionId={session.id}
             dynamic={dynamic}
