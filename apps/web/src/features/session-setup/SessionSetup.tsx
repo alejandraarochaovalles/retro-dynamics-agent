@@ -41,9 +41,8 @@ export function SessionSetup() {
     }
   }
 
-  // Generates candidate dynamics without creating a session yet — the
-  // creator picks one in handleChooseDynamic below. Split out of the form
-  // handler so "show different dynamics" can call it directly too.
+  // Generates the first batch of candidate dynamics without creating a
+  // session yet — the creator picks one in handleChooseDynamic below.
   async function generateProposals() {
     if (!team) return;
     setError(null);
@@ -52,6 +51,31 @@ export function SessionSetup() {
       const context = `${sessionTitle || "general retro"} — team: ${team.name}`;
       const { proposals } = await api.generateDynamics(context);
       setProposals(proposals);
+    } catch (err) {
+      setError(describeError(err));
+    } finally {
+      setGeneratingProposals(false);
+    }
+  }
+
+  // Adds 3 more proposals on top of the existing ones instead of replacing
+  // them, so the picker grows 3 → 6 → 9... and earlier options stay pickable.
+  // Dedupes by name since the no-GROQ_API_KEY fallback always returns the
+  // same 3 fixed dynamics.
+  async function generateMoreProposals() {
+    if (!team) return;
+    setError(null);
+    setGeneratingProposals(true);
+    try {
+      const context = `${sessionTitle || "general retro"} — team: ${team.name}`;
+      const { proposals: more } = await api.generateDynamics(context);
+      const existingNames = new Set((proposals ?? []).map((p) => p.name));
+      const newOnes = more.filter((p) => !existingNames.has(p.name));
+      if (newOnes.length === 0) {
+        setError("No new dynamics came back — try changing the session title for more variety.");
+        return;
+      }
+      setProposals([...(proposals ?? []), ...newOnes]);
     } catch (err) {
       setError(describeError(err));
     } finally {
@@ -188,8 +212,8 @@ export function SessionSetup() {
             <div className="card">
               <h2>Pick a dynamic{sessionTitle && ` for "${sessionTitle}"`}</h2>
               <div className="dynamic-options">
-                {proposals.map((proposal) => (
-                  <div key={proposal.name} className="dynamic-option">
+                {proposals.map((proposal, index) => (
+                  <div key={`${proposal.name}-${index}`} className="dynamic-option">
                     <span className="dynamic-icon" aria-hidden="true">
                       {proposal.icon}
                     </span>
@@ -209,10 +233,10 @@ export function SessionSetup() {
               <button
                 type="button"
                 className="secondary"
-                onClick={() => void generateProposals()}
+                onClick={() => void generateMoreProposals()}
                 disabled={generatingProposals}
               >
-                {generatingProposals ? "Generating…" : "Show different dynamics"}
+                {generatingProposals ? "Generating…" : `Show 3 more (${proposals.length} so far)`}
               </button>
             </div>
           )}
