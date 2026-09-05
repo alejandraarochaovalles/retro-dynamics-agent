@@ -68,6 +68,15 @@ export type SessionSummary = {
   action_items: ActionItem[];
 };
 
+export type IntegrationProvider = "jira" | "azure_devops";
+
+export type ExportResult = {
+  action_item_id: string;
+  status: "created" | "skipped" | "failed";
+  external_ref: string | null;
+  detail: string | null;
+};
+
 const API_URL = import.meta.env.VITE_API_URL ?? "http://127.0.0.1:8000";
 
 export class ApiError extends Error {
@@ -149,5 +158,24 @@ export const api = {
     request<{ token: string; configured: boolean }>("/api/liveblocks/auth", {
       method: "POST",
       body: JSON.stringify({ room, participant_name: participantName }),
+    }),
+
+  connectIntegration: (teamId: string, provider: IntegrationProvider, projectKey: string) =>
+    request<Team>(`/api/teams/${teamId}/integration`, {
+      method: "POST",
+      body: JSON.stringify({ provider, config: { project_key: projectKey } }),
+    }),
+
+  createActionItem: (sessionId: string, groupId: string, title: string, description = "") =>
+    request<ActionItem>(`/api/sessions/${sessionId}/action-items`, {
+      method: "POST",
+      body: JSON.stringify({ group_id: groupId, title, description }),
+    }),
+
+  // Empty actionItemIds exports every not-yet-exported action item in the session.
+  exportActionItems: (sessionId: string, actionItemIds: string[] = []) =>
+    request<{ results: ExportResult[] }>(`/api/sessions/${sessionId}/export`, {
+      method: "POST",
+      body: JSON.stringify({ action_item_ids: actionItemIds }),
     }),
 };

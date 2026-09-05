@@ -6,7 +6,11 @@ core only**:
 - `BoardScreen.tsx` — mounts `LiveblocksProvider` + `RoomProvider` (see
   `types.ts` for the Presence/Storage shapes and the `declare global`
   augmentation that types every Liveblocks hook app-wide) and a
-  `ClientSideSuspense` boundary.
+  `ClientSideSuspense` boundary. Its fallback reads `useStatus()` to tell
+  the difference between "still connecting" and "disconnected/reconnecting"
+  — the latter is shown as an explicit warning, since corporate networks/VPNs
+  that block WebSocket traffic (Zscaler/Blue Coat-style proxies) otherwise
+  leave the user staring at "Connecting…" forever with no explanation.
 - `Canvas.tsx` — sticky notes, live drag (position updates on every
   pointermove, not just on release — see `StickyNote.tsx`'s comment on
   why), toggleable voting (ADR-0004), live cursors via Presence.
@@ -27,8 +31,6 @@ ADR-0006):
   variants don't exist, only `canvas`.
 - Lasso/rectangle grouping — the consolidation screen after `close`
   (`/sessions/{id}/groups` etc.) has no frontend yet at all.
-- A "choose your dynamic" screen — session creation auto-picks
-  `proposals[0]` from `generateDynamics` instead.
 - Live phase-sync for participants who joined *before* the session was
   started: the coarse session `phase` (lobby/active/...) lives in
   Postgres, not Liveblocks, and isn't polled — a joiner sitting in the

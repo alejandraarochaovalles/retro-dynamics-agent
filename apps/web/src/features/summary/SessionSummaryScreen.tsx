@@ -2,8 +2,14 @@
 // groups + action items from GET /sessions/{id}/summary (populated by
 // agents/consolidator.py on close) rather than re-deriving anything from
 // Liveblocks, which the board has already disconnected from by then.
-import { useEffect, useState } from "react";
-import { api, ApiError, type Session, type SessionSummary } from "../../shared/api/client";
+import { useEffect, useState, type FormEvent } from "react";
+import {
+  api,
+  ApiError,
+  type IntegrationProvider,
+  type Session,
+  type SessionSummary,
+} from "../../shared/api/client";
 import { DynamicWatermark } from "../../shared/components/atoms/DynamicWatermark";
 
 function describeError(err: unknown): string {
@@ -16,12 +22,81 @@ export function SessionSummaryScreen({ session }: { session: Session }) {
   const [summary, setSummary] = useState<SessionSummary | null>(null);
   const [error, setError] = useState<string | null>(null);
 
+  // Jira/Azure DevOps only need a project key from the UI — the actual
+  // credentials (JIRA_API_TOKEN, AZURE_DEVOPS_PAT, ...) live server-side as
+  // env vars (see apps/api/config.py), shared by the whole deployment.
+  const [provider, setProvider] = useState<IntegrationProvider>("jira");
+  const [projectKey, setProjectKey] = useState("");
+  const [connectingIntegration, setConnectingIntegration] = useState(false);
+  const [integrationMessage, setIntegrationMessage] = useState<string | null>(null);
+
+  const [creatingActionItemFor, setCreatingActionItemFor] = useState<string | null>(null);
+  const [exportingId, setExportingId] = useState<string | null>(null);
+  const [exportingAll, setExportingAll] = useState(false);
+  const [exportMessages, setExportMessages] = useState<Record<string, string>>({});
+
+  function refreshSummary() {
+    return api.getSessionSummary(session.id).then(setSummary);
+  }
+
   useEffect(() => {
-    api
-      .getSessionSummary(session.id)
-      .then(setSummary)
-      .catch((err) => setError(describeError(err)));
+    refreshSummary().catch((err) => setError(describeError(err)));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [session.id]);
+
+  async function handleConnectIntegration(event: FormEvent) {
+    event.preventDefault();
+    setIntegrationMessage(null);
+    setConnectingIntegration(true);
+    try {
+      await api.connectIntegration(session.team_id, provider, projectKey);
+      setIntegrationMessage(`Connected to ${provider === "jira" ? "Jira" : "Azure DevOps"} project "${projectKey}".`);
+    } catch (err) {
+      setIntegrationMessage(describeError(err));
+    } finally {
+      setConnectingIntegration(false);
+    }
+  }
+
+  async function handleCreateActionItem(groupId: string, title: string) {
+    setCreatingActionItemFor(groupId);
+    setError(null);
+    try {
+      await api.createActionItem(session.id, groupId, title, title);
+      await refreshSummary();
+    } catch (err) {
+      setError(describeError(err));
+    } finally {
+      setCreatingActionItemFor(null);
+    }
+  }
+
+  async function handleExport(actionItemIds: string[], busyKey: string) {
+    if (busyKey === "*") setExportingAll(true);
+    else setExportingId(busyKey);
+    setError(null);
+    try {
+      const { results } = await api.exportActionItems(session.id, actionItemIds);
+      setExportMessages((prev) => {
+        const next = { ...prev };
+        for (const result of results) {
+          next[result.action_item_id] =
+            result.status === "created"
+              ? `Exported — ${result.external_ref}`
+              : result.status === "skipped"
+                ? "Already exported"
+                : `Failed: ${result.detail}`;
+        }
+        return next;
+      });
+      await refreshSummary();
+    } catch (err) {
+      setError(describeError(err));
+    } finally {
+      setExportingAll(false);
+      setExportingId(null);
+    }
+  }
 
   const groups = summary?.groups ?? [];
 
@@ -84,6 +159,14 @@ export function SessionSummaryScreen({ session }: { session: Session }) {
                           <span>{group.author}</span>
                           <span>★ {group.votes}</span>
                         </div>
+                        <button
+                          type="button"
+                          className="secondary"
+                          onClick={() => void handleCreateActionItem(group.id, group.text || group.label)}
+                          disabled={creatingActionItemFor === group.id}
+                        >
+                          {creatingActionItemFor === group.id ? "Adding…" : "+ Action item"}
+                        </button>
                       </div>
                     ))}
                   </div>
@@ -91,19 +174,65 @@ export function SessionSummaryScreen({ session }: { session: Session }) {
               ))
             )}
 
-            {summary.action_items.length > 0 && (
+            <h3>Action items</h3>
+            {summary.action_items.length === 0 ? (
+              <p className="meta">
+                No action items yet — click "+ Action item" on a note above to add one.
+              </p>
+            ) : (
               <>
-                <h3>Action items</h3>
                 <ul className="action-item-list">
                   {summary.action_items.map((item) => (
                     <li key={item.id}>
                       <strong>{item.title}</strong>
-                      {item.assignee && <span className="meta"> — {item.assignee}</span>}
+                      {item.assignee && <span className="meta"> — {item.assignee}</span>}{" "}
+                      {item.exported ? (
+                        <span className="meta">— exported ({item.external_ref})</span>
+                      ) : (
+                        <button
+                          type="button"
+                          className="secondary icon-btn"
+                          onClick={() => void handleExport([item.id], item.id)}
+                          disabled={exportingId === item.id || exportingAll}
+                        >
+                          {exportingId === item.id ? "Exporting…" : "Export"}
+                        </button>
+                      )}
+                      {exportMessages[item.id] && <p className="meta">{exportMessages[item.id]}</p>}
                     </li>
                   ))}
                 </ul>
+                <button
+                  type="button"
+                  onClick={() => void handleExport([], "*")}
+                  disabled={exportingAll || summary.action_items.every((item) => item.exported)}
+                >
+                  {exportingAll ? "Exporting all…" : "Export all pending"}
+                </button>
               </>
             )}
+
+            <h3>Connect Jira / Azure DevOps</h3>
+            <form className="field-row" onSubmit={(event) => void handleConnectIntegration(event)}>
+              <select
+                className="phase-select"
+                value={provider}
+                onChange={(event) => setProvider(event.target.value as IntegrationProvider)}
+              >
+                <option value="jira">Jira</option>
+                <option value="azure_devops">Azure DevOps</option>
+              </select>
+              <input
+                value={projectKey}
+                onChange={(event) => setProjectKey(event.target.value)}
+                placeholder="Project key (e.g. RETRO)"
+                required
+              />
+              <button type="submit" className="secondary" disabled={connectingIntegration}>
+                {connectingIntegration ? "Connecting…" : "Connect"}
+              </button>
+            </form>
+            {integrationMessage && <p className="meta">{integrationMessage}</p>}
           </div>
         </div>
       )}

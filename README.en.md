@@ -119,12 +119,13 @@ All under the `/api` prefix (plus `GET /health` with no prefix). Interactive doc
 
 ### Frontend wired to the backend
 
-`apps/web` is no longer just the shell: the `SessionSetup` screen ([src/features/session-setup](apps/web/src/features/session-setup/SessionSetup.tsx)) calls the real backend through [shared/api/client.ts](apps/web/src/shared/api/client.ts) and covers the full flow up to the lobby:
+`apps/web` is no longer just the shell: the `SessionSetup` screen ([src/features/session-setup](apps/web/src/features/session-setup/SessionSetup.tsx)) calls the real backend through [shared/api/client.ts](apps/web/src/shared/api/client.ts) and covers the full flow from team creation to a closed session's summary:
 
 1. checks `/health` on mount and shows whether the backend is `online`/`offline`,
 2. creates a team (`POST /teams`),
-3. creates a session: generates a dynamic (`POST /dynamics/generate`, takes the first proposal) and creates the session with it attached (`POST /sessions`), showing the `join_code` — or joins an existing one by code (`POST /sessions/join`),
-4. starts the session (`POST /sessions/{id}/start`) — once phase is `active`, mounts the live board (`BoardScreen`, see below).
+3. generates a batch of 3 dynamic proposals (`POST /dynamics/generate`) and lets the user pick one — or fetch 3 more (deduped by name) to grow the pool to 6, 9, etc. — then creates the session with the chosen dynamic attached (`POST /sessions`), showing the `join_code` — or joins an existing one by code (`POST /sessions/join`),
+4. starts the session (`POST /sessions/{id}/start`) — once phase is `active`, mounts the live board (`BoardScreen`, see below),
+5. once the session is `closed`, shows `SessionSummaryScreen` ([src/features/summary](apps/web/src/features/summary/SessionSummaryScreen.tsx)): the consolidated notes and votes (`GET /sessions/{id}/summary`), a "+ Action item" button per note (`POST /sessions/{id}/action-items`), and a form to connect the team's Jira/Azure DevOps project (`POST /teams/{id}/integration`) plus per-item or bulk export (`POST /sessions/{id}/export`) — export is idempotent and surfaces exactly why an item failed (no integration connected, missing credentials, etc.) instead of failing silently.
 
 CORS on `apps/api` already accepts both `http://localhost:5173` and `http://127.0.0.1:5173` (Vite's dev server can start on either).
 
@@ -135,7 +136,7 @@ CORS on `apps/api` already accepts both `http://localhost:5173` and `http://127.
 - **Liveblocks data model** (see [types.ts](apps/web/src/features/board/types.ts)): `notes: LiveList<LiveObject<Note>>`, `votes: LiveMap<participant, LiveList<noteId>>` (each participant writes only their own entry, no write conflicts), `phaseIndex: LiveObject<{value}>` (durable). Presence (ephemeral): `{name, cursor}`.
 - **Auth**: `apps/api`'s `/api/liveblocks/auth` already existed but had never been verified live — reading the `@liveblocks/node` SDK's source (no official Python SDK exists) turned up that the real Liveblocks endpoint's response is raw text (the JWT itself), not `{"token": ...}` as the original code assumed; fixed in [routes/liveblocks_auth.py](apps/api/routes/liveblocks_auth.py).
 - **Typing**: every Liveblocks hook (`useStorage`, `useMutation`, etc.) is typed app-wide via declaration merging (`declare global { interface Liveblocks {...} } }` in `types.ts`), not per-call generics. `npx tsc --noEmit` passes clean against the real installed `@liveblocks/core@2.24.4` types.
-- **Scope of this pass**: desktop canvas only. Mobile list view and lasso-based grouping (ADR-0006) are a follow-up — see [features/board/README.md](apps/web/src/features/board/README.md) for exactly what's missing.
+- **Scope of this pass**: desktop canvas, now with basic mobile-viewport responsiveness (composer and buttons wrap and stay usable below 640px) and a clearer connection-status message (via `useStatus()`) when a corporate network/VPN blocks the Liveblocks WebSocket, instead of hanging on "Connecting…" forever. The dedicated mobile list view and lasso-based grouping (ADR-0006) are still a follow-up — see [features/board/README.md](apps/web/src/features/board/README.md) for exactly what's missing.
 - **Verification**: with no real Liveblocks account on hand, this was verified by types (`tsc`) and pure logic (`votes.ts`, unit-tested) rather than live. `npm run verify:board` (two real Liveblocks connections, no browser, proving a note/vote/phase-change from one is seen by the other) is ready to run as soon as a real `LIVEBLOCKS_SECRET_KEY` is in `.env`.
 
 ### Behavior without credentials
@@ -151,7 +152,7 @@ Each external integration degrades to a clear response instead of breaking the f
 
 ## Project status
 
-🚧 Under construction, but **deployed to production** (see ADR-0003): backend and frontend run on Vercel (serverless functions + static Vite build), with real Postgres on Supabase, Groq and Liveblocks configured and verified end to end. The backend (`apps/api`) exposes the contract's endpoints with real persistence in Postgres (SQLAlchemy + Alembic), and the frontend now has the full flow through to the live board (create/join session → desktop canvas with Liveblocks). Still missing: the mobile view, grouping/consolidation after closing a session, and Jira/Azure DevOps credentials (every other integration is already live in production). The full design is documented in [docs/adr](docs/adr/README.md).
+🚧 Under construction, but **deployed to production** (see ADR-0003): backend and frontend run on Vercel (serverless functions + static Vite build), with real Postgres on Supabase, Groq and Liveblocks configured and verified end to end. The backend (`apps/api`) exposes the contract's endpoints with real persistence in Postgres (SQLAlchemy + Alembic), and the frontend now has the full flow through to the live board and a post-session summary screen (create/join session → desktop canvas with Liveblocks → consolidated summary with Jira/Azure DevOps export). Mobile-viewport responsiveness (layout, buttons) is fixed, though the dedicated mobile canvas view from ADR-0006 is still not built. The Jira/Azure DevOps export UI is live end to end; only real production credentials (`JIRA_*`/`AZURE_DEVOPS_*` env vars) are still unset, so exports there currently fail with a clear "not configured" message. The full design is documented in [docs/adr](docs/adr/README.md).
 
 ## License
 

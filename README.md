@@ -119,12 +119,13 @@ Todas bajo el prefijo `/api` (más `GET /health` sin prefijo). Documentación in
 
 ### Frontend conectado al backend
 
-`apps/web` ya no es solo el shell: la pantalla `SessionSetup` ([src/features/session-setup](apps/web/src/features/session-setup/SessionSetup.tsx)) llama al backend real a través de [shared/api/client.ts](apps/web/src/shared/api/client.ts) y cubre el flujo completo hasta el lobby:
+`apps/web` ya no es solo el shell: la pantalla `SessionSetup` ([src/features/session-setup](apps/web/src/features/session-setup/SessionSetup.tsx)) llama al backend real a través de [shared/api/client.ts](apps/web/src/shared/api/client.ts) y cubre el flujo completo desde crear el equipo hasta el resumen de una sesión cerrada:
 
 1. chequea `/health` al montar y muestra si el backend está `online`/`offline`,
 2. crea un equipo (`POST /teams`),
-3. crea una sesión: genera una dinámica (`POST /dynamics/generate`, toma la primera propuesta) y crea la sesión con esa dinámica adjunta (`POST /sessions`), mostrando el `join_code` — o se une con un código existente (`POST /sessions/join`),
-4. arranca la sesión (`POST /sessions/{id}/start`) — al llegar a fase `active`, monta el tablero en vivo (`BoardScreen`, ver abajo).
+3. genera una tanda de 3 dinámicas propuestas (`POST /dynamics/generate`) y deja elegir una — o pedir 3 más (sin duplicar por nombre) para ir creciendo el pool a 6, 9, etc. — y luego crea la sesión con la dinámica elegida adjunta (`POST /sessions`), mostrando el `join_code` — o se une con un código existente (`POST /sessions/join`),
+4. arranca la sesión (`POST /sessions/{id}/start`) — al llegar a fase `active`, monta el tablero en vivo (`BoardScreen`, ver abajo),
+5. al cerrarse la sesión (fase `closed`), muestra `SessionSummaryScreen` ([src/features/summary](apps/web/src/features/summary/SessionSummaryScreen.tsx)): las notas y votos consolidados (`GET /sessions/{id}/summary`), un botón "+ Action item" por nota (`POST /sessions/{id}/action-items`), y un formulario para conectar el proyecto de Jira/Azure DevOps del equipo (`POST /teams/{id}/integration`) más exportación individual o masiva (`POST /sessions/{id}/export`) — la exportación es idempotente y muestra exactamente por qué falló un item (sin integración conectada, credenciales faltantes, etc.) en vez de fallar en silencio.
 
 CORS en `apps/api` ya acepta `http://localhost:5173` y `http://127.0.0.1:5173` (el dev server de Vite arranca en cualquiera de las dos formas).
 
@@ -135,7 +136,7 @@ CORS en `apps/api` ya acepta `http://localhost:5173` y `http://127.0.0.1:5173` (
 - **Modelo de datos en Liveblocks** (ver [types.ts](apps/web/src/features/board/types.ts)): `notes: LiveList<LiveObject<Note>>`, `votes: LiveMap<participante, LiveList<noteId>>` (cada participante escribe solo su propia entrada, sin conflictos de escritura), `phaseIndex: LiveObject<{value}>` durable. Presencia (efímera): `{name, cursor}`.
 - **Auth**: `apps/api`'s `/api/liveblocks/auth` ya existía, pero no estaba verificado en vivo — al revisar el código fuente del SDK `@liveblocks/node` (no hay SDK oficial en Python) encontramos que la respuesta del endpoint real de Liveblocks es texto plano (el JWT), no `{"token": ...}` como asumía el código original; corregido en [routes/liveblocks_auth.py](apps/api/routes/liveblocks_auth.py).
 - **Tipado**: los hooks de Liveblocks (`useStorage`, `useMutation`, etc.) están tipados en toda la app vía *declaration merging* (`declare global { interface Liveblocks {...} } }` en `types.ts`), no con genéricos por-llamada. `npx tsc --noEmit` pasa limpio contra los tipos reales de `@liveblocks/core@2.24.4` instalado.
-- **Alcance de esta pasada**: solo canvas de escritorio. Vista de lista mobile y agrupación por lazo (ADR-0006) quedan para una pasada siguiente — ver [features/board/README.md](apps/web/src/features/board/README.md) para el detalle de qué falta.
+- **Alcance de esta pasada**: canvas de escritorio, ahora con responsividad básica en mobile (el composer y los botones se acomodan y siguen usables por debajo de 640px) y un mensaje de estado de conexión más claro (vía `useStatus()`) cuando una red corporativa/VPN bloquea el WebSocket de Liveblocks, en vez de quedarse en "Connecting…" para siempre. La vista de lista mobile dedicada y la agrupación por lazo (ADR-0006) quedan para una pasada siguiente — ver [features/board/README.md](apps/web/src/features/board/README.md) para el detalle de qué falta.
 - **Verificación**: sin una cuenta de Liveblocks real a mano, esto se verificó por tipos (`tsc`) y lógica pura (`votes.ts` con tests), no en vivo. `npm run verify:board` (dos clientes Liveblocks reales, sin navegador, probando que una nota/voto/cambio de fase de uno se ve en el otro) queda listo para correr en cuanto haya un `LIVEBLOCKS_SECRET_KEY` real en `.env`.
 
 ### Comportamiento sin credenciales
@@ -151,7 +152,7 @@ Cada integración externa se degrada a una respuesta clara en vez de romper el f
 
 ## Estado del proyecto
 
-🚧 En construcción, pero **desplegado en producción** (ver ADR-0003): backend y frontend corren en Vercel (funciones serverless + Vite estático), con Postgres real en Supabase, Groq y Liveblocks configurados y verificados end-to-end. El backend (`apps/api`) expone los endpoints del contrato con persistencia real en Postgres (SQLAlchemy + Alembic), y el frontend tiene el flujo completo hasta el tablero en vivo (crear/unirse a sesión → canvas de escritorio con Liveblocks). Falta la vista mobile, la agrupación/consolidación tras cerrar la sesión, y las credenciales de Jira/Azure DevOps (el resto de integraciones ya están activas en producción). El diseño completo está documentado en [docs/adr](docs/adr/README.md).
+🚧 En construcción, pero **desplegado en producción** (ver ADR-0003): backend y frontend corren en Vercel (funciones serverless + Vite estático), con Postgres real en Supabase, Groq y Liveblocks configurados y verificados end-to-end. El backend (`apps/api`) expone los endpoints del contrato con persistencia real en Postgres (SQLAlchemy + Alembic), y el frontend tiene el flujo completo hasta el tablero en vivo y una pantalla de resumen post-sesión (crear/unirse a sesión → canvas de escritorio con Liveblocks → resumen consolidado con exportación a Jira/Azure DevOps). La responsividad en mobile (layout, botones) está resuelta, aunque la vista de canvas mobile dedicada de ADR-0006 todavía no está construida. La UI de exportación a Jira/Azure DevOps funciona de punta a punta; solo faltan las credenciales reales de producción (variables `JIRA_*`/`AZURE_DEVOPS_*`), así que por ahora esas exportaciones fallan con un mensaje claro de "no configurado". El diseño completo está documentado en [docs/adr](docs/adr/README.md).
 
 ## Licencia
 
