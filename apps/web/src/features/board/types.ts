@@ -25,6 +25,12 @@ export type BoardStorage = {
   notes: LiveList<LiveObject<NoteData>>;
   votes: LiveMap<string, LiveList<string>>;
   phaseIndex: LiveObject<{ value: number }>;
+  // Flipped by the facilitator's handleClose (PhaseTopBar.tsx) once
+  // POST /sessions/{id}/close succeeds, so every other participant's board
+  // — which has no other way to learn the session closed server-side —
+  // notices via useStorage and re-fetches the session to move to the
+  // summary screen too.
+  closed: LiveObject<{ value: boolean }>;
 };
 
 // Declaration merging into Liveblocks' own `Liveblocks` interface (see

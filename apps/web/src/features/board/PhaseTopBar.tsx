@@ -1,5 +1,5 @@
 import { useMutation, useOthers, useStorage } from "@liveblocks/react/suspense";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { api, type DynamicProposal, type NoteInput, type Session } from "../../shared/api/client";
 import { countVotes } from "./votes";
 
@@ -28,6 +28,14 @@ export function PhaseTopBar({
   const notes = useStorage((root) => root.notes) ?? [];
   const votesMap = useStorage((root) => root.votes);
   const others = useOthers();
+  // Storage (not Presence) so it's durable and reaches everyone, including
+  // participants who reconnect right as the facilitator closes — flipped by
+  // handleClose below once the backend confirms the close.
+  const closedFlag = useStorage((root) => root.closed?.value) ?? false;
+
+  const markClosed = useMutation(({ storage }) => {
+    storage.get("closed").set("value", true);
+  }, []);
 
   const lastIndex = dynamic.phases.length - 1;
   const isFirstPhase = phaseIndex <= 0;
@@ -38,6 +46,21 @@ export function PhaseTopBar({
   // Legacy sessions (created before created_by existed) stay open to
   // anyone closing them — same fallback as the backend's _ensure_creator.
   const canClose = !createdBy || participantName === createdBy;
+
+  // Only the facilitator gets `closed` back directly from api.closeSession
+  // in handleClose. Everyone else has no other signal that the session
+  // closed server-side, so they pick it up here and fetch the now-closed
+  // session themselves to move to the summary screen.
+  const handledRemoteClose = useRef(false);
+  useEffect(() => {
+    if (!closedFlag || canClose || handledRemoteClose.current) return;
+    handledRemoteClose.current = true;
+    api
+      .getSession(sessionId)
+      .then(onClosed)
+      .catch((err) => setError(err instanceof Error ? err.message : "Could not load the closed session"));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [closedFlag]);
 
   const advancePhase = useMutation(({ storage }) => {
     const phase = storage.get("phaseIndex");
@@ -71,6 +94,7 @@ export function PhaseTopBar({
         phase: note.phase,
       }));
       const closed = await api.closeSession(sessionId, payload, participantName);
+      markClosed();
       onClosed(closed);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not close the session");

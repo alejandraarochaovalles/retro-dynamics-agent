@@ -75,6 +75,7 @@ export function BoardScreen({
             notes: new LiveList([]),
             votes: new LiveMap(),
             phaseIndex: new LiveObject({ value: 0 }),
+            closed: new LiveObject({ value: false }),
           } satisfies BoardStorage
         }
       >
