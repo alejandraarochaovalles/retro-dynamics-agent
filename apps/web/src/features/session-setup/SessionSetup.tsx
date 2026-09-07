@@ -23,12 +23,33 @@ export function SessionSetup() {
   const [generatingProposals, setGeneratingProposals] = useState(false);
   const [creatingSession, setCreatingSession] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [integrationNotice, setIntegrationNotice] = useState<string | null>(null);
 
   useEffect(() => {
     api
       .health()
       .then(() => setBackendStatus("online"))
       .catch(() => setBackendStatus("offline"));
+  }, []);
+
+  // Resumes after the full-page "Connect with Jira" OAuth round trip (see
+  // apps/api/routes/jira_oauth.py). The frontend has no persistence of its
+  // own, so the callback redirect carries session_id back in the URL and
+  // this just re-fetches the session to land back on the summary screen.
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const resumeId = params.get("session_id");
+    const connected = params.get("jira_connected");
+    const jiraError = params.get("jira_error");
+    if (!resumeId || (!connected && !jiraError)) return;
+    api
+      .getSession(resumeId)
+      .then((resumed) => {
+        setSession(resumed);
+        setIntegrationNotice(connected ? "Connected to Jira." : `Jira connection failed: ${jiraError}`);
+      })
+      .catch((err) => setError(describeError(err)))
+      .finally(() => window.history.replaceState({}, "", window.location.pathname));
   }, []);
 
   async function handleCreateTeam(event: FormEvent) {
@@ -128,7 +149,7 @@ export function SessionSetup() {
   }
 
   if (session?.phase === "closed") {
-    return <SessionSummaryScreen session={session} />;
+    return <SessionSummaryScreen session={session} initialIntegrationMessage={integrationNotice} />;
   }
 
   return (

@@ -42,7 +42,15 @@ def connect_integration(
     row = db.get(TeamRow, team_id)
     if row is None:
         raise HTTPException(status_code=404, detail="team not found")
-    row.integration = {"provider": payload.provider, "config": payload.config}
+    existing = row.integration or {}
+    new_integration: dict = {"provider": payload.provider, "config": payload.config}
+    # Preserve OAuth tokens (see routes/jira_oauth.py) if this call is just
+    # updating the manual config (e.g. the project key) for the same
+    # provider — otherwise resubmitting the "Advanced / manual setup" form
+    # would silently disconnect a team's "Connect with Jira" tokens.
+    if existing.get("provider") == payload.provider and "oauth" in existing:
+        new_integration["oauth"] = existing["oauth"]
+    row.integration = new_integration
     db.commit()
     db.refresh(row)
     return _to_out(row)

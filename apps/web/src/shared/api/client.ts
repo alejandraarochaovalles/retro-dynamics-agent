@@ -178,4 +178,17 @@ export const api = {
       method: "POST",
       body: JSON.stringify({ action_item_ids: actionItemIds }),
     }),
+
+  // Not a fetch — the browser must navigate here so Atlassian's own consent
+  // screen can render (see apps/api/routes/jira_oauth.py). session_id rides
+  // along in the signed `state` param and comes back in the callback
+  // redirect, since the frontend has no persistence of its own.
+  jiraConnectUrl: (teamId: string, sessionId: string, projectKey: string) => {
+    const params = new URLSearchParams({
+      team_id: teamId,
+      session_id: sessionId,
+      project_key: projectKey,
+    });
+    return `${API_URL}/api/integrations/jira/connect?${params.toString()}`;
+  },
 };

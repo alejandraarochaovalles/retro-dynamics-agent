@@ -57,7 +57,9 @@ def export_action_items(
             if not project:
                 raise ValueError("integration config is missing a project key")
             if provider == "jira":
-                ref = jira_client.create_issue(project, item.title, item.description)
+                ref = jira_client.create_issue(
+                    project, item.title, item.description, team=team_row, db=db
+                )
             elif provider == "azure_devops":
                 ref = azure_devops_client.create_work_item(project, item.title, item.description)
             else:

@@ -18,17 +18,35 @@ function describeError(err: unknown): string {
   return "Unexpected error";
 }
 
-export function SessionSummaryScreen({ session }: { session: Session }) {
+export function SessionSummaryScreen({
+  session,
+  initialIntegrationMessage = null,
+}: {
+  session: Session;
+  initialIntegrationMessage?: string | null;
+}) {
   const [summary, setSummary] = useState<SessionSummary | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  // Jira/Azure DevOps only need a project key from the UI — the actual
-  // credentials (JIRA_API_TOKEN, AZURE_DEVOPS_PAT, ...) live server-side as
-  // env vars (see apps/api/config.py), shared by the whole deployment.
+  // "Connect with Jira" (OAuth, see apps/api/routes/jira_oauth.py) only
+  // needs a project key from the UI — the browser is redirected to
+  // Atlassian to consent, and tokens are stored per-team server-side.
+  const [jiraProjectKey, setJiraProjectKey] = useState("");
+
+  // Manual/global fallback — the actual credentials (JIRA_API_TOKEN,
+  // AZURE_DEVOPS_PAT, ...) live server-side as env vars (see
+  // apps/api/config.py), shared by the whole deployment. Still the only
+  // path for Azure DevOps, and a fallback for teams that skip OAuth.
   const [provider, setProvider] = useState<IntegrationProvider>("jira");
   const [projectKey, setProjectKey] = useState("");
   const [connectingIntegration, setConnectingIntegration] = useState(false);
-  const [integrationMessage, setIntegrationMessage] = useState<string | null>(null);
+  const [integrationMessage, setIntegrationMessage] = useState<string | null>(
+    initialIntegrationMessage
+  );
+
+  function handleConnectJira() {
+    window.location.href = api.jiraConnectUrl(session.team_id, session.id, jiraProjectKey);
+  }
 
   const [creatingActionItemFor, setCreatingActionItemFor] = useState<string | null>(null);
   const [exportingId, setExportingId] = useState<string | null>(null);
@@ -212,7 +230,21 @@ export function SessionSummaryScreen({ session }: { session: Session }) {
               </>
             )}
 
-            <h3>Connect Jira / Azure DevOps</h3>
+            <h3>Connect with Jira</h3>
+            <div className="field-row">
+              <input
+                value={jiraProjectKey}
+                onChange={(event) => setJiraProjectKey(event.target.value)}
+                placeholder="Project key (e.g. RETRO)"
+                required
+              />
+              <button type="button" onClick={handleConnectJira} disabled={!jiraProjectKey}>
+                Connect with Jira
+              </button>
+            </div>
+            {integrationMessage && <p className="meta">{integrationMessage}</p>}
+
+            <h3>Advanced / manual setup</h3>
             <form className="field-row" onSubmit={(event) => void handleConnectIntegration(event)}>
               <select
                 className="phase-select"
@@ -232,7 +264,6 @@ export function SessionSummaryScreen({ session }: { session: Session }) {
                 {connectingIntegration ? "Connecting…" : "Connect"}
               </button>
             </form>
-            {integrationMessage && <p className="meta">{integrationMessage}</p>}
           </div>
         </div>
       )}

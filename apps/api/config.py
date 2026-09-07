@@ -28,6 +28,21 @@ class Settings:
     jira_api_token: str | None = os.getenv("JIRA_API_TOKEN") or None
     azure_devops_org_url: str | None = os.getenv("AZURE_DEVOPS_ORG_URL") or None
     azure_devops_pat: str | None = os.getenv("AZURE_DEVOPS_PAT") or None
+    # "Connect with Jira" (OAuth 2.0 3LO, see integrations/jira_oauth.py) —
+    # lets a team connect its own Jira account instead of relying on the
+    # single global JIRA_API_TOKEN above. From developer.atlassian.com/console.
+    jira_oauth_client_id: str | None = os.getenv("JIRA_OAUTH_CLIENT_ID") or None
+    jira_oauth_client_secret: str | None = os.getenv("JIRA_OAUTH_CLIENT_SECRET") or None
+    jira_oauth_redirect_uri: str | None = os.getenv("JIRA_OAUTH_REDIRECT_URI") or None
+    # Symmetric key (Fernet) used to encrypt OAuth tokens at rest, and to
+    # derive the signing key for the OAuth `state` param — see crypto.py and
+    # integrations/oauth_state.py. Generate with:
+    #   python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
+    token_encryption_key: str | None = os.getenv("TOKEN_ENCRYPTION_KEY") or None
+    # Single canonical URL the Jira OAuth callback redirects the browser back
+    # to once tokens are stored — distinct from frontend_origins below (a
+    # CORS allowlist that may hold several values, not a redirect target).
+    frontend_base_url: str = os.getenv("FRONTEND_BASE_URL") or "http://localhost:5173"
     # Comma-separated list of extra origins allowed to call this API (e.g. a
     # deployed frontend's URL) — additive to the hardcoded local dev origins
     # in main.py, not a replacement, so `uvicorn main:app --reload` keeps

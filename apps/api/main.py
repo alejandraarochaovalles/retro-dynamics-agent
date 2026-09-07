@@ -12,6 +12,7 @@ from routes import (
     consolidation,
     dynamics,
     export,
+    jira_oauth,
     liveblocks_auth,
     sessions,
     teams,
@@ -34,7 +35,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-for router in (teams, dynamics, sessions, liveblocks_auth, consolidation, action_items, export):
+for router in (teams, dynamics, sessions, liveblocks_auth, consolidation, action_items, export, jira_oauth):
     app.include_router(router.router, prefix="/api")
 
 
