@@ -1,7 +1,8 @@
-# Vercel's Python builder (@vercel/python) reads requirements.txt, not
-# pyproject.toml — keep these in sync with the [project.dependencies] list
-# in pyproject.toml (that file stays the source of truth for local dev via
-# `pip install -e ".[dev]"` / CI).
+# Vercel's Python builder (@vercel/python) actually installs from uv.lock,
+# not this file (see docs/adr/0003, "Lesson learned" — this comment used to
+# claim the opposite and that caused a production outage). Kept anyway,
+# in sync with [project.dependencies] in pyproject.toml, since some tools/
+# readers still expect a plain requirements.txt at this path.
 fastapi>=0.111
 uvicorn[standard]>=0.30
 pydantic>=2.7

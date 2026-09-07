@@ -28,7 +28,8 @@ apps/api/                      → Python backend (FastAPI)
   models.py                      → pydantic schemas for the contract
   routes/                        → one endpoint (or group) per file, see table below
   agents/                        → dynamic_generator.py, consolidator.py
-  integrations/                  → jira_client.py, azure_devops_client.py
+  integrations/                  → jira_client.py, jira_oauth.py ("Connect with Jira"), oauth_state.py, azure_devops_client.py
+  crypto.py                      → Fernet encryption for OAuth tokens at rest
   tests/                         → pytest + FastAPI TestClient tests, against real Postgres
 packages/contracts/            → shared API contract (OpenAPI)
 docs/adr/                       → documented architecture decisions
@@ -129,6 +130,17 @@ All under the `/api` prefix (plus `GET /health` with no prefix). Interactive doc
 
 CORS on `apps/api` already accepts both `http://localhost:5173` and `http://127.0.0.1:5173` (Vite's dev server can start on either).
 
+### Connecting Jira via OAuth 2.0 ("Connect with Jira")
+
+Exporting to Jira used to depend on a single global token (`JIRA_API_TOKEN`), set by hand by whoever had access to the Vercel dashboard — a non-starter if other teams (or other companies) want to use the app with their own Jira account. Now any team can connect its own Jira with a real **OAuth 2.0 (3LO)** flow against Atlassian, with no env vars to touch and no code access needed:
+
+- **"Connect with Jira" button** on `SessionSummaryScreen`: redirects to `auth.atlassian.com`, the user consents on Atlassian's own site, and comes back authenticated — the backend never sees or stores their password.
+- **Signed `state`, no server-side sessions** ([integrations/oauth_state.py](apps/api/integrations/oauth_state.py)): HMAC-SHA256 + TTL, consistent with the rest of the app (serverless on Vercel, no state across invocations — see ADR-0003). The `state` also carries the retro's `session_id`: since the frontend has no persistence of its own (no localStorage, no router), that's what lets it land back on the exact same screen after the Atlassian redirect.
+- **Tokens encrypted at rest** ([crypto.py](apps/api/crypto.py)): symmetric Fernet encryption over `access_token`/`refresh_token` — never stored as plain JSON in the database.
+- **Refresh token rotation**: Atlassian issues a new `refresh_token` on every refresh; [jira_client.py](apps/api/integrations/jira_client.py) always persists the rotated pair, not just the new `access_token`.
+- **Fallback unchanged**: if a team never connects via OAuth, `jira_client.create_issue` still uses the global `JIRA_API_TOKEN` exactly as before. The manual form ("Advanced / manual setup") stays available as a plan B, and it's still the only path for Azure DevOps (its OAuth requires registering an app in Microsoft Entra ID, out of scope for this pass).
+- **Test coverage**: `test_oauth_state.py`, `test_crypto.py`, `test_jira_oauth_routes.py`, and `test_jira_client_oauth.py` cover state signing/verification, encryption, the full `/connect` → `/callback` round trip (with the Atlassian calls mocked), and both of `create_issue`'s paths (OAuth and global token).
+
 ### Live board (Liveblocks)
 
 `features/board` covers the **desktop canvas**: free-position sticky notes, live drag (position syncs on every `pointermove`, not just on release — that's exactly what ADR-0002 uses to justify Liveblocks over Supabase Realtime), toggleable voting (ADR-0004), and other participants' live cursors.
@@ -147,12 +159,14 @@ Each external integration degrades to a clear response instead of breaking the f
 |---|---|
 | `GROQ_API_KEY` | `POST /dynamics/generate` returns 3 fixed dynamics (Sailboat, 4Ls, Mad/Sad/Glad) with `source: "fallback"` |
 | `LIVEBLOCKS_SECRET_KEY` | `POST /liveblocks/auth` returns `configured: false` instead of failing |
-| `JIRA_*` / `AZURE_DEVOPS_*` | `POST /sessions/{id}/export` marks each item `status: "failed"` with a detail of what's missing |
+| `JIRA_*` (team hasn't connected via OAuth) / `AZURE_DEVOPS_*` | `POST /sessions/{id}/export` marks each item `status: "failed"` with a detail of what's missing |
 | `DATABASE_URL` | the backend uses a local SQLite file (`apps/api/dev.db`) instead of Postgres — see [db.py](apps/api/db.py) |
+
+Jira is the exception: a team can avoid this dependency entirely by connecting its own account via OAuth ("Connect with Jira", see above) instead of relying on the global token.
 
 ## Project status
 
-🚧 Under construction, but **deployed to production** (see ADR-0003): backend and frontend run on Vercel (serverless functions + static Vite build), with real Postgres on Supabase, Groq and Liveblocks configured and verified end to end. The backend (`apps/api`) exposes the contract's endpoints with real persistence in Postgres (SQLAlchemy + Alembic), and the frontend now has the full flow through to the live board and a post-session summary screen (create/join session → desktop canvas with Liveblocks → consolidated summary with Jira/Azure DevOps export). Mobile-viewport responsiveness (layout, buttons) is fixed, though the dedicated mobile canvas view from ADR-0006 is still not built. The Jira/Azure DevOps export UI is live end to end; only real production credentials (`JIRA_*`/`AZURE_DEVOPS_*` env vars) are still unset, so exports there currently fail with a clear "not configured" message. The full design is documented in [docs/adr](docs/adr/README.md).
+🚧 Under construction, but **deployed to production** (see ADR-0003): backend and frontend run on Vercel (serverless functions + static Vite build), with real Postgres on Supabase, Groq and Liveblocks configured and verified end to end. The backend (`apps/api`) exposes the contract's endpoints with real persistence in Postgres (SQLAlchemy + Alembic), and the frontend now has the full flow through to the live board and a post-session summary screen (create/join session → desktop canvas with Liveblocks → consolidated summary with Jira/Azure DevOps export). Mobile-viewport responsiveness (layout, buttons) is fixed, though the dedicated mobile canvas view from ADR-0006 is still not built. Jira export works end to end in production: any team can connect its own account via OAuth 2.0 ("Connect with Jira") without relying on any global credentials. Azure DevOps, by contrast, still depends on the manual global token (`AZURE_DEVOPS_*`), which is unset in production, so those exports currently fail with a clear "not configured" message until it gets its own OAuth flow. The full design is documented in [docs/adr](docs/adr/README.md).
 
 ## License
 

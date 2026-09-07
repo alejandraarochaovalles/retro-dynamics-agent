@@ -8,3 +8,4 @@ Record of the architecture decisions made for this project, with their context a
 - [0004 — Toggleable voting](0004-toggleable-voting.md)
 - [0005 — Python backend, monorepo](0005-backend-python-monorepo.md)
 - [0006 — Free-position canvas with mobile list view](0006-free-position-canvas-mobile-view.md)
+- [0007 — Per-team Jira OAuth instead of a single global token](0007-jira-oauth-per-team.md)
