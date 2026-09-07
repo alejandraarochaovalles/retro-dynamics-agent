@@ -9,6 +9,7 @@ import {
   type IntegrationProvider,
   type Session,
   type SessionSummary,
+  type Team,
 } from "../../shared/api/client";
 import { DynamicWatermark } from "../../shared/components/atoms/DynamicWatermark";
 
@@ -18,15 +19,40 @@ function describeError(err: unknown): string {
   return "Unexpected error";
 }
 
+// Describes a connected integration for display, e.g. "Jira (project RETRO,
+// Acme Corp)" — pulled from Team.integration.config, whatever shape the
+// provider stored (see routes/jira_oauth.py and routes/teams.py).
+function describeIntegration(integration: Record<string, unknown> | null): string | null {
+  if (!integration) return null;
+  const provider = integration.provider;
+  const config = (integration.config ?? {}) as Record<string, unknown>;
+  const projectKey = config.project_key as string | undefined;
+  const siteName = config.site_name as string | undefined;
+  if (provider === "jira") {
+    return `Jira — project ${projectKey || "?"}${siteName ? ` (${siteName})` : ""}`;
+  }
+  if (provider === "azure_devops") {
+    return `Azure DevOps — project ${projectKey || "?"}`;
+  }
+  return null;
+}
+
 export function SessionSummaryScreen({
   session,
+  participantName,
   initialIntegrationMessage = null,
 }: {
   session: Session;
+  participantName: string;
   initialIntegrationMessage?: string | null;
 }) {
   const [summary, setSummary] = useState<SessionSummary | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [team, setTeam] = useState<Team | null>(null);
+
+  // Legacy sessions (created before created_by existed) stay open to
+  // anyone — same fallback as the backend's facilitator checks.
+  const isFacilitator = !session.created_by || participantName === session.created_by;
 
   // "Connect with Jira" (OAuth, see apps/api/routes/jira_oauth.py) only
   // needs a project key from the UI — the browser is redirected to
@@ -45,7 +71,16 @@ export function SessionSummaryScreen({
   );
 
   function handleConnectJira() {
-    window.location.href = api.jiraConnectUrl(session.team_id, session.id, jiraProjectKey);
+    window.location.href = api.jiraConnectUrl(
+      session.team_id,
+      session.id,
+      jiraProjectKey,
+      participantName
+    );
+  }
+
+  function refreshTeam() {
+    return api.getTeam(session.team_id).then(setTeam);
   }
 
   const [creatingActionItemFor, setCreatingActionItemFor] = useState<string | null>(null);
@@ -59,6 +94,7 @@ export function SessionSummaryScreen({
 
   useEffect(() => {
     refreshSummary().catch((err) => setError(describeError(err)));
+    refreshTeam().catch((err) => setError(describeError(err)));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [session.id]);
 
@@ -67,8 +103,9 @@ export function SessionSummaryScreen({
     setIntegrationMessage(null);
     setConnectingIntegration(true);
     try {
-      await api.connectIntegration(session.team_id, provider, projectKey);
+      await api.connectIntegration(session.team_id, provider, projectKey, session.id, participantName);
       setIntegrationMessage(`Connected to ${provider === "jira" ? "Jira" : "Azure DevOps"} project "${projectKey}".`);
+      await refreshTeam();
     } catch (err) {
       setIntegrationMessage(describeError(err));
     } finally {
@@ -94,7 +131,7 @@ export function SessionSummaryScreen({
     else setExportingId(busyKey);
     setError(null);
     try {
-      const { results } = await api.exportActionItems(session.id, actionItemIds);
+      const { results } = await api.exportActionItems(session.id, actionItemIds, participantName);
       setExportMessages((prev) => {
         const next = { ...prev };
         for (const result of results) {
@@ -206,7 +243,7 @@ export function SessionSummaryScreen({
                       {item.assignee && <span className="meta"> — {item.assignee}</span>}{" "}
                       {item.exported ? (
                         <span className="meta">— exported ({item.external_ref})</span>
-                      ) : (
+                      ) : isFacilitator ? (
                         <button
                           type="button"
                           className="secondary icon-btn"
@@ -215,55 +252,73 @@ export function SessionSummaryScreen({
                         >
                           {exportingId === item.id ? "Exporting…" : "Export"}
                         </button>
-                      )}
+                      ) : null}
                       {exportMessages[item.id] && <p className="meta">{exportMessages[item.id]}</p>}
                     </li>
                   ))}
                 </ul>
-                <button
-                  type="button"
-                  onClick={() => void handleExport([], "*")}
-                  disabled={exportingAll || summary.action_items.every((item) => item.exported)}
-                >
-                  {exportingAll ? "Exporting all…" : "Export all pending"}
-                </button>
+                {isFacilitator && (
+                  <button
+                    type="button"
+                    onClick={() => void handleExport([], "*")}
+                    disabled={exportingAll || summary.action_items.every((item) => item.exported)}
+                  >
+                    {exportingAll ? "Exporting all…" : "Export all pending"}
+                  </button>
+                )}
               </>
             )}
 
-            <h3>Connect with Jira</h3>
-            <div className="field-row">
-              <input
-                value={jiraProjectKey}
-                onChange={(event) => setJiraProjectKey(event.target.value)}
-                placeholder="Project key (e.g. RETRO)"
-                required
-              />
-              <button type="button" onClick={handleConnectJira} disabled={!jiraProjectKey}>
-                Connect with Jira
-              </button>
-            </div>
-            {integrationMessage && <p className="meta">{integrationMessage}</p>}
+            <h3>Jira / Azure DevOps</h3>
+            <p className="meta">
+              {describeIntegration(team?.integration ?? null)
+                ? `Connected — ${describeIntegration(team?.integration ?? null)}`
+                : "Not connected yet."}
+            </p>
 
-            <h3>Advanced / manual setup</h3>
-            <form className="field-row" onSubmit={(event) => void handleConnectIntegration(event)}>
-              <select
-                className="phase-select"
-                value={provider}
-                onChange={(event) => setProvider(event.target.value as IntegrationProvider)}
-              >
-                <option value="jira">Jira</option>
-                <option value="azure_devops">Azure DevOps</option>
-              </select>
-              <input
-                value={projectKey}
-                onChange={(event) => setProjectKey(event.target.value)}
-                placeholder="Project key (e.g. RETRO)"
-                required
-              />
-              <button type="submit" className="secondary" disabled={connectingIntegration}>
-                {connectingIntegration ? "Connecting…" : "Connect"}
-              </button>
-            </form>
+            {isFacilitator ? (
+              <>
+                <h3>Connect with Jira</h3>
+                <div className="field-row">
+                  <input
+                    value={jiraProjectKey}
+                    onChange={(event) => setJiraProjectKey(event.target.value)}
+                    placeholder="Project key (e.g. RETRO)"
+                    required
+                  />
+                  <button type="button" onClick={handleConnectJira} disabled={!jiraProjectKey}>
+                    Connect with Jira
+                  </button>
+                </div>
+                {integrationMessage && <p className="meta">{integrationMessage}</p>}
+
+                <h3>Advanced / manual setup</h3>
+                <form className="field-row" onSubmit={(event) => void handleConnectIntegration(event)}>
+                  <select
+                    className="phase-select"
+                    value={provider}
+                    onChange={(event) => setProvider(event.target.value as IntegrationProvider)}
+                  >
+                    <option value="jira">Jira</option>
+                    <option value="azure_devops">Azure DevOps</option>
+                  </select>
+                  <input
+                    value={projectKey}
+                    onChange={(event) => setProjectKey(event.target.value)}
+                    placeholder="Project key (e.g. RETRO)"
+                    required
+                  />
+                  <button type="submit" className="secondary" disabled={connectingIntegration}>
+                    {connectingIntegration ? "Connecting…" : "Connect"}
+                  </button>
+                </form>
+              </>
+            ) : (
+              <p className="meta">
+                Only {session.created_by} (the facilitator) can connect Jira/Azure DevOps or export
+                action items.
+              </p>
+            )}
           </div>
         </div>
       )}

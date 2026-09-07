@@ -11,12 +11,14 @@ export function PhaseTopBar({
   dynamic,
   participantName,
   createdBy,
+  joinCode,
   onClosed,
 }: {
   sessionId: string;
   dynamic: DynamicProposal;
   participantName: string;
   createdBy: string | null;
+  joinCode: string;
   onClosed: (session: Session) => void;
 }) {
   const [closing, setClosing] = useState(false);
@@ -86,6 +88,9 @@ export function PhaseTopBar({
         <span className="phase-name">{currentPhase}</span>
         <span className="meta">
           phase {phaseIndex + 1}/{dynamic.phases.length}
+        </span>
+        <span className="meta join-code">
+          Join code: <code>{joinCode}</code>
         </span>
         <span className="meta">
           {others.length + 1} {others.length === 0 ? "person" : "people"} here

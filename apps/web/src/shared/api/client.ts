@@ -128,6 +128,8 @@ export const api = {
 
   getSession: (id: string) => request<Session>(`/api/sessions/${id}`),
 
+  getTeam: (id: string) => request<Team>(`/api/teams/${id}`),
+
   startSession: (id: string, participantName: string) =>
     request<Session>(`/api/sessions/${id}/start`, {
       method: "POST",
@@ -160,10 +162,21 @@ export const api = {
       body: JSON.stringify({ room, participant_name: participantName }),
     }),
 
-  connectIntegration: (teamId: string, provider: IntegrationProvider, projectKey: string) =>
+  connectIntegration: (
+    teamId: string,
+    provider: IntegrationProvider,
+    projectKey: string,
+    sessionId: string,
+    participantName: string
+  ) =>
     request<Team>(`/api/teams/${teamId}/integration`, {
       method: "POST",
-      body: JSON.stringify({ provider, config: { project_key: projectKey } }),
+      body: JSON.stringify({
+        provider,
+        config: { project_key: projectKey },
+        session_id: sessionId,
+        participant_name: participantName,
+      }),
     }),
 
   createActionItem: (sessionId: string, groupId: string, title: string, description = "") =>
@@ -173,21 +186,22 @@ export const api = {
     }),
 
   // Empty actionItemIds exports every not-yet-exported action item in the session.
-  exportActionItems: (sessionId: string, actionItemIds: string[] = []) =>
+  exportActionItems: (sessionId: string, actionItemIds: string[] = [], participantName?: string) =>
     request<{ results: ExportResult[] }>(`/api/sessions/${sessionId}/export`, {
       method: "POST",
-      body: JSON.stringify({ action_item_ids: actionItemIds }),
+      body: JSON.stringify({ action_item_ids: actionItemIds, participant_name: participantName }),
     }),
 
   // Not a fetch — the browser must navigate here so Atlassian's own consent
   // screen can render (see apps/api/routes/jira_oauth.py). session_id rides
   // along in the signed `state` param and comes back in the callback
   // redirect, since the frontend has no persistence of its own.
-  jiraConnectUrl: (teamId: string, sessionId: string, projectKey: string) => {
+  jiraConnectUrl: (teamId: string, sessionId: string, projectKey: string, participantName: string) => {
     const params = new URLSearchParams({
       team_id: teamId,
       session_id: sessionId,
       project_key: projectKey,
+      participant_name: participantName,
     });
     return `${API_URL}/api/integrations/jira/connect?${params.toString()}`;
   },

@@ -22,6 +22,7 @@ from sqlalchemy.orm import Session as DbSession
 import crypto
 from config import settings
 from db import get_db
+from db_models import RetroSession
 from db_models import Team as TeamRow
 from integrations import jira_oauth
 from integrations.oauth_state import InvalidState, sign_state, verify_state
@@ -35,12 +36,33 @@ def _frontend_redirect(**params: str) -> RedirectResponse:
 
 @router.get("/integrations/jira/connect", operation_id="startJiraOAuth")
 def start_jira_oauth(
-    team_id: str, session_id: str, project_key: str = "", db: DbSession = Depends(get_db)
+    team_id: str,
+    session_id: str,
+    project_key: str = "",
+    participant_name: str = "",
+    db: DbSession = Depends(get_db),
 ) -> RedirectResponse:
     if db.get(TeamRow, team_id) is None:
         return _frontend_redirect(jira_error="team_not_found")
+    # Only enforced when session_id resolves to a real session that
+    # actually recorded a creator — a synthetic/unknown session_id (e.g. in
+    # tests that only care about the signed-state round trip) falls through
+    # to the permissive default, same story as every other facilitator
+    # check in this app.
+    session_row = db.get(RetroSession, session_id)
+    if session_row and session_row.created_by and participant_name != session_row.created_by:
+        return _frontend_redirect(jira_error="not_facilitator", session_id=session_id)
     try:
-        state = sign_state(team_id=team_id, session_id=session_id, project_key=project_key)
+        # participant_name rides along in the signed state (not just used
+        # for the check above) so the callback can echo it back to the
+        # frontend below — a full-page OAuth redirect wipes React state,
+        # and the frontend has no persistence of its own to restore it from.
+        state = sign_state(
+            team_id=team_id,
+            session_id=session_id,
+            project_key=project_key,
+            participant_name=participant_name,
+        )
         authorize_url = jira_oauth.build_authorize_url(state)
     except (crypto.EncryptionNotConfigured, jira_oauth.JiraOAuthNotConfigured) as exc:
         return _frontend_redirect(jira_error=str(exc))
@@ -64,16 +86,22 @@ def jira_oauth_callback(
 
     team_row = db.get(TeamRow, data.team_id)
     if team_row is None:
-        return _frontend_redirect(jira_error="team_not_found", session_id=data.session_id)
+        return _frontend_redirect(
+            jira_error="team_not_found", session_id=data.session_id, participant_name=data.participant_name
+        )
 
     try:
         tokens = jira_oauth.exchange_code_for_tokens(code)
         resources = jira_oauth.get_accessible_resources(tokens.access_token)
     except httpx.HTTPError:
-        return _frontend_redirect(jira_error="exchange_failed", session_id=data.session_id)
+        return _frontend_redirect(
+            jira_error="exchange_failed", session_id=data.session_id, participant_name=data.participant_name
+        )
 
     if not resources:
-        return _frontend_redirect(jira_error="no_accessible_sites", session_id=data.session_id)
+        return _frontend_redirect(
+            jira_error="no_accessible_sites", session_id=data.session_id, participant_name=data.participant_name
+        )
 
     # Single-Jira-site-per-team assumption — fine for this app's scope; a
     # team connected to a multi-site Atlassian org would need a site picker.
@@ -100,4 +128,6 @@ def jira_oauth_callback(
     }
     db.commit()
 
-    return _frontend_redirect(jira_connected="1", session_id=data.session_id)
+    return _frontend_redirect(
+        jira_connected="1", session_id=data.session_id, participant_name=data.participant_name
+    )

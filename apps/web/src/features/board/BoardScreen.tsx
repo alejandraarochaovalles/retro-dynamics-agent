@@ -84,6 +84,7 @@ export function BoardScreen({
             dynamic={dynamic}
             participantName={participantName}
             createdBy={session.created_by}
+            joinCode={session.join_code}
             onClosed={onSessionClosed}
           />
           <Canvas participantName={participantName} dynamic={dynamic} />

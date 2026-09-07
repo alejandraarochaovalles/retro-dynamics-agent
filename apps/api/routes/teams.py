@@ -31,6 +31,14 @@ def create_team(payload: TeamCreate, db: DbSession = Depends(get_db)) -> Team:
     return _to_out(row)
 
 
+@router.get("/teams/{team_id}", operation_id="getTeam", response_model=Team)
+def get_team(team_id: str, db: DbSession = Depends(get_db)) -> Team:
+    row = db.get(TeamRow, team_id)
+    if row is None:
+        raise HTTPException(status_code=404, detail="team not found")
+    return _to_out(row)
+
+
 @router.post(
     "/teams/{team_id}/integration",
     operation_id="connectIntegration",
@@ -42,6 +50,17 @@ def connect_integration(
     row = db.get(TeamRow, team_id)
     if row is None:
         raise HTTPException(status_code=404, detail="team not found")
+    # Only enforced when session_id resolves to a real session that
+    # actually recorded a creator — same fallback story as
+    # routes/sessions.py's _ensure_creator, so old/no-session callers keep
+    # working unchanged.
+    if payload.session_id:
+        session_row = db.get(RetroSession, payload.session_id)
+        if session_row and session_row.created_by and payload.participant_name != session_row.created_by:
+            raise HTTPException(
+                status_code=403,
+                detail="only the session facilitator can connect an integration",
+            )
     existing = row.integration or {}
     new_integration: dict = {"provider": payload.provider, "config": payload.config}
     # Preserve OAuth tokens (see routes/jira_oauth.py) if this call is just

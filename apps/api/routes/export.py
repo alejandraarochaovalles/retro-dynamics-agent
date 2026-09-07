@@ -25,6 +25,13 @@ def export_action_items(
     session_row = db.get(RetroSession, id)
     if session_row is None:
         raise HTTPException(status_code=404, detail="session not found")
+    # Same fallback story as routes/sessions.py's _ensure_creator: only
+    # enforced when the session actually recorded a creator.
+    if session_row.created_by and payload.participant_name != session_row.created_by:
+        raise HTTPException(
+            status_code=403,
+            detail="only the session facilitator can export action items",
+        )
     team_row = db.get(TeamRow, session_row.team_id)
     integration = team_row.integration if team_row else None
 

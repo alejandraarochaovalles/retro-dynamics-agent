@@ -27,6 +27,11 @@ class Team(BaseModel):
 class IntegrationConnect(BaseModel):
     provider: Literal["jira", "azure_devops"]
     config: dict[str, Any] = Field(default_factory=dict)
+    # Optional facilitator check, same backward-compat story as
+    # SessionCreate.created_by: only enforced (see routes/teams.py) when
+    # session_id resolves to a session that actually has a created_by set.
+    session_id: str | None = None
+    participant_name: str | None = None
 
 
 # ── Dynamics ─────────────────────────────────────────────────────────
@@ -178,6 +183,9 @@ class DeleteResponse(BaseModel):
 # ── Export ───────────────────────────────────────────────────────────
 class ExportRequest(BaseModel):
     action_item_ids: list[str] = Field(default_factory=list)  # empty = export all pending
+    # Same backward-compat story as SessionStart.participant_name: only
+    # enforced when the session actually recorded a creator.
+    participant_name: str | None = None
 
 
 class ExportResult(BaseModel):

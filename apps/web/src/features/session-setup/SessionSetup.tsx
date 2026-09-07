@@ -42,6 +42,12 @@ export function SessionSetup() {
     const connected = params.get("jira_connected");
     const jiraError = params.get("jira_error");
     if (!resumeId || (!connected && !jiraError)) return;
+    // The OAuth round trip is a full-page redirect, which wipes React state
+    // — the callback echoes participant_name back (see
+    // apps/api/routes/jira_oauth.py) so the facilitator is still recognized
+    // as such once we land back on the summary screen.
+    const resumedParticipantName = params.get("participant_name");
+    if (resumedParticipantName) setParticipantName(resumedParticipantName);
     api
       .getSession(resumeId)
       .then((resumed) => {
@@ -149,7 +155,13 @@ export function SessionSetup() {
   }
 
   if (session?.phase === "closed") {
-    return <SessionSummaryScreen session={session} initialIntegrationMessage={integrationNotice} />;
+    return (
+      <SessionSummaryScreen
+        session={session}
+        participantName={participantName}
+        initialIntegrationMessage={integrationNotice}
+      />
+    );
   }
 
   return (

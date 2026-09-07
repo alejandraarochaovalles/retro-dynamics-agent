@@ -25,6 +25,7 @@ class StateData:
     team_id: str
     session_id: str
     project_key: str
+    participant_name: str
 
 
 def _signing_key() -> bytes:
@@ -47,11 +48,19 @@ def _b64decode(text: str) -> bytes:
     return base64.urlsafe_b64decode(text + padding)
 
 
-def sign_state(*, team_id: str, session_id: str, project_key: str = "", ttl_seconds: int = 600) -> str:
+def sign_state(
+    *,
+    team_id: str,
+    session_id: str,
+    project_key: str = "",
+    participant_name: str = "",
+    ttl_seconds: int = 600,
+) -> str:
     payload = {
         "team_id": team_id,
         "session_id": session_id,
         "project_key": project_key,
+        "participant_name": participant_name,
         "iat": time.time(),
         "ttl": ttl_seconds,
     }
@@ -73,6 +82,10 @@ def verify_state(state: str) -> StateData:
             team_id=payload["team_id"],
             session_id=payload["session_id"],
             project_key=payload["project_key"],
+            # Defaulted for states signed before this field existed (a
+            # signature mismatch would already have rejected a tampered
+            # payload, so a missing key here just means "older state").
+            participant_name=payload.get("participant_name", ""),
         )
     except InvalidState:
         raise
