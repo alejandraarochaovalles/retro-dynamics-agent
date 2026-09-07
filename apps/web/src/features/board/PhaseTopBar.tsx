@@ -1,4 +1,4 @@
-import { useMutation, useOthers, useStorage } from "@liveblocks/react/suspense";
+import { useMutation, useOthers, useStorage, useSyncStatus } from "@liveblocks/react/suspense";
 import { useEffect, useRef, useState } from "react";
 import { api, type DynamicProposal, type NoteInput, type Session } from "../../shared/api/client";
 import { countVotes } from "./votes";
@@ -32,6 +32,7 @@ export function PhaseTopBar({
   // participants who reconnect right as the facilitator closes — flipped by
   // handleClose below once the backend confirms the close.
   const closedFlag = useStorage((root) => root.closed?.value) ?? false;
+  const syncStatus = useSyncStatus();
 
   const markClosed = useMutation(({ storage }) => {
     storage.get("closed").set("value", true);
@@ -61,6 +62,40 @@ export function PhaseTopBar({
       .catch((err) => setError(err instanceof Error ? err.message : "Could not load the closed session"));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [closedFlag]);
+
+  // markClosed() above sends its storage write over Liveblocks' async
+  // connection — calling onClosed(closed) right away would unmount this
+  // component (BoardScreen only renders while session.phase === "active"),
+  // tearing down the room and risking the write never reaching the server
+  // before the socket closes, so other participants' closedFlag never flips.
+  // Wait for useSyncStatus to confirm the write went through; the timeout
+  // is a safety net (backend close already succeeded either way) in case
+  // sync never settles, e.g. a flaky connection.
+  const pendingCloseRef = useRef<Session | null>(null);
+  const closeTimeoutRef = useRef<number | null>(null);
+
+  function finalizeClose(closed: Session) {
+    if (!pendingCloseRef.current) return;
+    if (closeTimeoutRef.current !== null) {
+      window.clearTimeout(closeTimeoutRef.current);
+      closeTimeoutRef.current = null;
+    }
+    pendingCloseRef.current = null;
+    onClosed(closed);
+  }
+
+  useEffect(() => {
+    if (pendingCloseRef.current && syncStatus === "synchronized") {
+      finalizeClose(pendingCloseRef.current);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [syncStatus]);
+
+  useEffect(() => {
+    return () => {
+      if (closeTimeoutRef.current !== null) window.clearTimeout(closeTimeoutRef.current);
+    };
+  }, []);
 
   const advancePhase = useMutation(({ storage }) => {
     const phase = storage.get("phaseIndex");
@@ -95,10 +130,10 @@ export function PhaseTopBar({
       }));
       const closed = await api.closeSession(sessionId, payload, participantName);
       markClosed();
-      onClosed(closed);
+      pendingCloseRef.current = closed;
+      closeTimeoutRef.current = window.setTimeout(() => finalizeClose(closed), 1000);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not close the session");
-    } finally {
       setClosing(false);
     }
   }
